@@ -3,13 +3,19 @@ JokeDuino - full sketch
 All things connected and checked?
 Upload this sketch and you are ready to go.
 
+Some notes:
+
+Free ram on start:
+without PROGMEM for all static strings 344
+with PROGMEM for all atatic strings 504
 */
 
+#include <avr/pgmspace.h>
 #include <MemoryFree.h>
 #include <pgmStrToRAM.h>
 #include <SD.h>             // need to include the SD library
-#define SD_ChipSelectPin 4  //using digital pin 4 on arduino nano 328
-#include <TMRpcm.h>         //  also need to include this library...
+#define SD_ChipSelectPin 4  // using digital pin 4 on arduino nano 328
+#include <TMRpcm.h>         // also need to include this library...
 #include "Timer.h"
 
 TMRpcm tmrpcm;   // create an object for use in this sketch
@@ -66,21 +72,57 @@ Vriables used to store MODES and OPTIONS
 // we have 4 modes
 int currentMode = 0;
 const int maxMode = 3;
+boolean modeChanged = false;
 
+int   currentModeOption[4] = {-1,-1, 2,-1};
+const int maxModeOption[4] = { 0, 4, 4, 1};
+boolean optionChanged = false;
 
-int   currentModeOption[4] = {0,0,0,0};
-const int maxModeOption[4] = {0,4,5,1};
 /*
 here current option has to be stored separatelly per mode 
 for mode0 - welcome message there is no options - "Hi I'm jokeDuino "
 for mode1 - choose prank type there will be N options looping "choose different pranks by pressing B button"
             0 - moskito
 
-for mode2 - set up volume options 4 options looping "change volume by pressing B button"
+for mode2 - set up volume options 0 - 5 options looping "change volume by pressing B button" (we start from level 3 - there is 7 levels of volumes but the last ones 6 and 7 do not work for us )
 for mode3 - ready to go - no options "I'm ready to go do not press anything more - selected prank is: "
 */
 
+prog_char intro[] PROGMEM = { "modes/intro.wav" };
 
+prog_char mo0[]  PROGMEM = { "modes/mo0.wav" };
+
+prog_char mo1[]    PROGMEM = { "modes/mo1.wav" };
+// mode 1 option sounds
+prog_char mo1op0[] PROGMEM = { "modes/mo1op0.wav" };  // mosquito
+prog_char mo1op1[] PROGMEM = { "modes/mo1op1.wav" };  // door
+prog_char mo1op2[] PROGMEM = { "modes/mo1op2.wav" };  // police
+prog_char mo1op3[] PROGMEM = { "modes/mo1op3.wav" };  // dog
+prog_char mo1op4[] PROGMEM = { "modes/mo1op4.wav" };  // cat
+
+/* Actuall sounds used in pranks for each mode */
+prog_char smo1op0[] PROGMEM = { "insects/mosq1.wav" };
+prog_char smo1op1[] PROGMEM = { "doors/door1.wav" };
+prog_char smo1op2[] PROGMEM = { "insects/mosq1.wav" };  //TODO: choose sounds
+prog_char smo1op3[] PROGMEM = { "insects/mosq1.wav" };
+prog_char smo1op4[] PROGMEM = { "insects/mosq1.wav" };
+
+prog_char* selectedPrank;
+
+prog_char mo2[] PROGMEM = { "modes/mo2.wav" };
+prog_char mo2op[] PROGMEM = { "modes/mo2op.wav" }; // TODO: record /modes/mo2o.wav "sound level testing, sound level testing"
+
+prog_char mo3[] PROGMEM = { "modes/mo3.wav" };
+
+
+// ==========================================
+// commands from serial
+// ==========================================
+
+prog_char modeupx[] PROGMEM = { "modex" };
+prog_char optionupx[] PROGMEM = { "optionx" };
+
+// ==========================================
 
 void setup(){
   // reserve memory for commands over serial port
@@ -104,8 +146,8 @@ void setup(){
   
   if (!card.init(SPI_HALF_SPEED, SD_ChipSelectPin)) {
     Serial.println(F("initialization failed. Things to check:"));
-    //Serial.println("* is a card is inserted?");
-    //Serial.println("* Is your wiring correct?");
+    Serial.println(F("* is a card is inserted?"));
+    Serial.println(F("* Is your wiring correct?"));
     //Serial.println("* did you change the chipSelect pin to match your shield or module?");
     return;
   } else {
@@ -116,7 +158,8 @@ void setup(){
     Serial.println(F("SD fail :-("));  
     return;   // don't do anything more if not
   }
-  tmrpcm.play("intro/intro.wav"); //play the intro message
+  //Serial.println(getString(intro));
+  tmrpcm.play(getString(intro)); //play the intro message
 
   t1ID = t1.every(CHECKLIGHTPERIOD, checkLightSensor);
   t2ID = t2.every(HOW_OTEN_TO_PRINT, printInfo);
@@ -135,31 +178,26 @@ void loop(){
   t1.update();
   t2.update();
   
+  if(modeChanged==true){
+    checkModes();
+  }
+  
+  if(optionChanged==true){
+    checkOptions();
+  }
+  
+  
   
   if (stringComplete) {
     // received command from serial  
     changeCurrentModeBasedOnSerial();
     changeCurrentModeOptionBasedOnSerial();
     
+    /*
     if(inputString == "mosq1x"){ //send the letter p over the serial monitor to start playback
       
       tmrpcm.stopPlayback();
       tmrpcm.play("insects/mosq1.wav");
-    
-    } else if(inputString == "mosq2x"){ //send the letter p over the serial monitor to start playback
-  
-      tmrpcm.stopPlayback();
-      tmrpcm.play("insects/mosq2.wav");
-  
-    } else if(inputString == "nellyx"){ //send the letter p over the serial monitor to start playback
-      
-      tmrpcm.stopPlayback();
-      tmrpcm.play("nelly.wav");
-      
-    } else if(inputString == "mosq1ax"){ //send the letter p over the serial monitor to start playback
-      
-      tmrpcm.stopPlayback();
-      tmrpcm.play("insects/mosq1a.wav");
     
     } else if(inputString == "door1x"){ //send the letter p over the serial monitor to start playback
       // here test the 
@@ -175,11 +213,12 @@ void loop(){
     } else if(inputString == "ux"){ 
       tmrpcm.volume(1);
     }
+    */
     
     inputString = "";
     stringComplete = false;
   }
-  delay(1000);
+  delay(500);
 }
 
 
@@ -238,21 +277,23 @@ void printInfo(){
 }
 
 void changeCurrentModeBasedOnSerial(){
-  if(inputString == "modeUpx"){
+  if(inputString == getString(modeupx)){
     currentMode++;
     if(currentMode > maxMode){
       currentMode = 0;
     }
+    modeChanged=true;
   }
 }
 
 void changeCurrentModeOptionBasedOnSerial(){
-  if(inputString == "optionUpx"){
+  if(inputString == getString(optionupx)){
     currentModeOption[currentMode]++;
+    if(currentModeOption[currentMode] > maxModeOption[currentMode] ){
+      currentModeOption[currentMode] = 0;
+    }
+    optionChanged=true;
   }  
-  if(currentModeOption[currentMode] > maxModeOption[currentMode] ){
-    currentModeOption[currentMode] = 0;
-  } 
 }
 
 /*************** 
@@ -286,6 +327,7 @@ void changeCurrentModeOptionBasedOnSerial(){
          if(currentMode > maxMode){
            currentMode = 0;
          }
+         modeChanged = true;
       }
     }
   }
@@ -330,4 +372,76 @@ void changeCurrentModeOptionBasedOnSerial(){
   lastButtonStateB = reading;
 }
 
+void checkModes(){
+    if(currentMode==0){
+        tmrpcm.stopPlayback();
+        tmrpcm.play(getString(mo0));
+    }else if(currentMode==1){
+        tmrpcm.stopPlayback();
+        tmrpcm.play(getString(mo1));
+    }else if(currentMode==2){
+        tmrpcm.stopPlayback();
+        tmrpcm.play(getString(mo2));
+    }else if(currentMode==3){
+        tmrpcm.stopPlayback();
+        tmrpcm.play(getString(mo3));
+    }
+    modeChanged = false;
+}
 
+void  checkOptions(){
+  if(optionChanged==true){
+     if(currentMode==1){
+       // choose prank type 
+       switch (currentModeOption[1]) {
+        case 0:
+          selectedPrank = smo1op0;
+          tmrpcm.stopPlayback();
+          tmrpcm.play(getString(mo1op0));
+          break;
+        case 1:
+          selectedPrank = smo1op1;
+          tmrpcm.stopPlayback();
+          tmrpcm.play(getString(mo1op1));
+          break;
+        case 2:
+          selectedPrank = smo1op2;
+          tmrpcm.stopPlayback();
+          tmrpcm.play(getString(mo1op2));
+          break;
+        case 3:
+          selectedPrank = smo1op3;
+          tmrpcm.stopPlayback();
+          tmrpcm.play(getString(mo1op3));
+          break;
+        case 4:
+          selectedPrank = smo1op4;
+          tmrpcm.stopPlayback();
+          tmrpcm.play(getString(mo1op4));
+          break;
+        }
+       //TODO: remove it
+       Serial.println(F(""));
+       Serial.println(F("==================="));
+       Serial.println(getString(selectedPrank));
+       Serial.println(F("==================="));
+       
+    }else if(currentMode==2){
+      // volume mode 
+      tmrpcm.stopPlayback();
+      tmrpcm.setVolume(currentModeOption[2]);
+      tmrpcm.play(getString(mo2op));
+    } 
+  
+  optionChanged=false;
+  }
+}
+
+
+#define MAX_STRING 60  //TODO: count longest string 
+char stringBuffer[MAX_STRING];
+
+char* getString(const char* str) {
+  strcpy_P(stringBuffer, (char*)str);
+  return stringBuffer;
+}
