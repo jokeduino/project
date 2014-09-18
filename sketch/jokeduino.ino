@@ -8,6 +8,10 @@ Some notes:
 Free ram on start:
 without PROGMEM for all static strings 344
 with PROGMEM for all atatic strings 504
+
+watch it if free memory at start is <= 300
+then playback does not work 
+The minimum at start has to be 340 
 */
 
 #include <avr/pgmspace.h>
@@ -17,6 +21,14 @@ with PROGMEM for all atatic strings 504
 #define SD_ChipSelectPin 4  // using digital pin 4 on arduino nano 328
 #include <TMRpcm.h>         // also need to include this library...
 #include "Timer.h"
+
+#define DEBUG  // comment this line out to disable debug statements
+
+#ifdef DEBUG
+  #define DEBUG_PRINTLN(x)  Serial.println(F(x))
+#else
+  #define DEBUG_PRINT(x)
+#endif
 
 TMRpcm tmrpcm;   // create an object for use in this sketch
 Sd2Card card;
@@ -36,6 +48,10 @@ int t1ID;
 const unsigned long HOW_OTEN_TO_PRINT = 1000;  //1s
 Timer t2;            //instantiate the timer object
 int t2ID;
+
+const unsigned long HOW_OTEN_TO_PRANK = 1 * 20 * 1000;  //5min
+Timer t3;            //instantiate the timer object
+int t3ID;
 
 
 /*
@@ -107,8 +123,8 @@ prog_char smo1op2[] PROGMEM = { "insects/mosq1.wav" };  //TODO: choose sounds
 prog_char smo1op3[] PROGMEM = { "insects/mosq1.wav" };
 prog_char smo1op4[] PROGMEM = { "insects/mosq1.wav" };
 
-prog_char* selectedPrank;
-
+prog_char* selectedPrank = smo1op0;
+          
 prog_char mo2[] PROGMEM = { "modes/mo2.wav" };
 prog_char mo2op[] PROGMEM = { "modes/mo2op.wav" }; // TODO: record /modes/mo2o.wav "sound level testing, sound level testing"
 
@@ -126,7 +142,7 @@ prog_char optionupx[] PROGMEM = { "optionx" };
 
 void setup(){
   // reserve memory for commands over serial port
-  inputString.reserve(20);
+  inputString.reserve(10);
   
   pinMode(buttonPinA, INPUT_PULLUP);    // this enable build in pull up resistor for pin 12
   pinMode(buttonPinB, INPUT_PULLUP);    
@@ -158,12 +174,18 @@ void setup(){
     Serial.println(F("SD fail :-("));  
     return;   // don't do anything more if not
   }
-  //Serial.println(getString(intro));
-  tmrpcm.play(getString(intro)); //play the intro message
-
-  t1ID = t1.every(CHECKLIGHTPERIOD, checkLightSensor);
-  t2ID = t2.every(HOW_OTEN_TO_PRINT, printInfo);
   
+  t1ID = t1.every(CHECKLIGHTPERIOD, checkLightSensor);
+  
+  #ifdef DEBUG
+    t2ID = t2.every(HOW_OTEN_TO_PRINT, printInfo);
+  #else
+    // print it just once here
+    printInfo(); 
+  #endif
+  
+  t3ID = t3.every(HOW_OTEN_TO_PRANK, prank);
+  tmrpcm.play(getString(intro)); //play the intro message
 }
 
 void loop(){  
@@ -177,6 +199,7 @@ void loop(){
   readButtonB();
   t1.update();
   t2.update();
+  t3.update();
   
   if(modeChanged==true){
     checkModes();
@@ -438,10 +461,21 @@ void  checkOptions(){
 }
 
 
-#define MAX_STRING 60  //TODO: count longest string 
+#define MAX_STRING 30  //TODO: count longest string 
 char stringBuffer[MAX_STRING];
 
 char* getString(const char* str) {
   strcpy_P(stringBuffer, (char*)str);
   return stringBuffer;
+}
+
+void prank(){
+  // here it might be different for different pranks 
+  // but for now - check the light and ...
+  Serial.println(F("==========================="));
+  Serial.println(F("==== GOING TO PRANK NOW ==="));
+  Serial.println(F("==========================="));
+  
+  tmrpcm.stopPlayback();
+  tmrpcm.play(getString(selectedPrank));
 }
