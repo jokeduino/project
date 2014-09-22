@@ -81,7 +81,7 @@ const int maxMode = 3;
 boolean modeChanged = false;
 
 int   currentModeOption[4] = {-1,-1, 2,-1};
-const int maxModeOption[4] = { 0, 4, 4, 0};
+const int maxModeOption[4] = { 0, 5, 4, 0};
 boolean optionChanged = false;
 
 /*
@@ -93,6 +93,7 @@ for mode1 - choose prank type there will be N options looping "choose different 
             2 - police
             3 - dog
             4 - cat
+            5 - ghost
 
 for mode2 - set up volume options 0 - 4 options looping "change volume by pressing B button" (we start from level 3 - there is 7 levels of volumes but the last ones 5, 6 and 7 do not work for us )
 for mode3 - ready to go - no options "I'm ready to go do not press anything more - selected prank is: "
@@ -109,15 +110,18 @@ prog_char mo1op1[] PROGMEM = { "modes/mo1op1.wav" };  // door
 prog_char mo1op2[] PROGMEM = { "modes/mo1op2.wav" };  // police
 prog_char mo1op3[] PROGMEM = { "modes/mo1op3.wav" };  // dog
 prog_char mo1op4[] PROGMEM = { "modes/mo1op4.wav" };  // cat
+prog_char mo1op5[] PROGMEM = { "modes/mo1op5.wav" };  // ghost
 
 /* Actuall sounds used in pranks for each mode */
-prog_char smo1op0[] PROGMEM = { "insects/mosq1.wav" };
-prog_char smo1op1[] PROGMEM = { "doors/door1.wav" };
-prog_char smo1op2[] PROGMEM = { "insects/mosq1.wav" };  //TODO: choose sounds
-prog_char smo1op3[] PROGMEM = { "insects/mosq1.wav" };
-prog_char smo1op4[] PROGMEM = { "insects/mosq1.wav" };
+prog_char smo1op0[] PROGMEM = { "insects/mosq1.wav" };  // mosquito sound
+prog_char smo1op1[] PROGMEM = { "doors/door1.wav" };    // door sound
+prog_char smo1op2[] PROGMEM = { "police/police1.wav" }; // police sound 
+prog_char smo1op3[] PROGMEM = { "dogs/dog1.wav" };      // dog sound
+prog_char smo1op4[] PROGMEM = { "cats/cat1.wav" };      // cat sound
+prog_char smo1op5[] PROGMEM = { "ghosts/ghost1.wav" };  // ghost sound
 
-prog_char* selectedPrank = smo1op0;
+prog_char* selectedPrankText =   mo1op0;
+prog_char* selectedPrankSound = smo1op0;
           
 prog_char mo2[]   PROGMEM = { "modes/mo2.wav" };
 prog_char mo2op[] PROGMEM = { "modes/mo2op.wav" }; // "sound level testing, sound level testing"
@@ -391,48 +395,48 @@ void  checkOptions(){
        // choose prank type 
        switch (currentModeOption[1]) {
         case 0:
-          selectedPrank = smo1op0;
-          tmrpcm.stopPlayback();
-          tmrpcm.play(getString(mo1op0));
+          selectedPrankText  =  mo1op0;
+          selectedPrankSound = smo1op0;
           break;
         case 1:
-          selectedPrank = smo1op1;
-          tmrpcm.stopPlayback();
-          tmrpcm.play(getString(mo1op1));
+          selectedPrankText  =  mo1op1;
+          selectedPrankSound = smo1op1;
           break;
         case 2:
-          selectedPrank = smo1op2;
-          tmrpcm.stopPlayback();
-          tmrpcm.play(getString(mo1op2));
+          selectedPrankText  =  mo1op2;
+          selectedPrankSound = smo1op2;
           break;
         case 3:
-          selectedPrank = smo1op3;
-          tmrpcm.stopPlayback();
-          tmrpcm.play(getString(mo1op3));
+          selectedPrankText  =  mo1op3;
+          selectedPrankSound = smo1op3;
           break;
         case 4:
-          selectedPrank = smo1op4;
-          tmrpcm.stopPlayback();
-          tmrpcm.play(getString(mo1op4));
+          selectedPrankText  =  mo1op4;
+          selectedPrankSound = smo1op4;
+          break;
+        case 5:
+          selectedPrankText  =  mo1op5;
+          selectedPrankSound = smo1op5;
           break;
         }
+        tmrpcm.stopPlayback();
+        tmrpcm.play(getString(selectedPrankText));
+        Serial.println(F(""));
+        Serial.println(F("==================="));
+        Serial.println(getString(selectedPrankSound));
+        Serial.println(F("==================="));
        
+     }else if(currentMode==2){
+       // volume mode 
+       tmrpcm.stopPlayback();
+       tmrpcm.setVolume(currentModeOption[2]);
+       tmrpcm.play(getString(mo2op));
        Serial.println(F(""));
        Serial.println(F("==================="));
-       Serial.println(getString(selectedPrank));
+       Serial.print(F("sound level: "));
+       Serial.println(currentModeOption[2], DEC);
        Serial.println(F("==================="));
-       
-    }else if(currentMode==2){
-      // volume mode 
-      tmrpcm.stopPlayback();
-      tmrpcm.setVolume(currentModeOption[2]);
-      tmrpcm.play(getString(mo2op));
-      Serial.println(F(""));
-      Serial.println(F("==================="));
-      Serial.print(F("sound level: "));
-      Serial.println(currentModeOption[2], DEC);
-      Serial.println(F("==================="));
-    } 
+     } 
   optionChanged=false;
   }
 }
@@ -460,6 +464,6 @@ void prank(){
     Serial.println(F("==========================="));
     
     tmrpcm.stopPlayback();
-    tmrpcm.play(getString(selectedPrank));
+    tmrpcm.play(getString(selectedPrankSound));
   }
 }
