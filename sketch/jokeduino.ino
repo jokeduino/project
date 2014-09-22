@@ -319,6 +319,7 @@ void changeCurrentModeOptionBasedOnSerial(){
          if(currentMode > maxMode){
            currentMode = 0;
          }
+         prankInOperation = false;
          modeChanged = true;
       }
     }
@@ -366,20 +367,22 @@ void changeCurrentModeOptionBasedOnSerial(){
 }
 
 void checkModes(){
-    if(currentMode==0){
-        tmrpcm.stopPlayback();
-        tmrpcm.play(getString(mo0));
-    }else if(currentMode==1){
-        tmrpcm.stopPlayback();
-        tmrpcm.play(getString(mo1));
-    }else if(currentMode==2){
-        tmrpcm.stopPlayback();
-        tmrpcm.play(getString(mo2));
-    }else if(currentMode==3){
-        tmrpcm.stopPlayback();
-        tmrpcm.play(getString(mo3));
+    if(modeChanged == true){
+        if(currentMode==0){
+            tmrpcm.stopPlayback();
+            tmrpcm.play(getString(mo0));
+        }else if(currentMode==1){
+            tmrpcm.stopPlayback();
+            tmrpcm.play(getString(mo1));
+        }else if(currentMode==2){
+            tmrpcm.stopPlayback();
+            tmrpcm.play(getString(mo2));
+        }else if(currentMode==3){
+            tmrpcm.stopPlayback();
+            tmrpcm.play(getString(mo3));
+        }
+        modeChanged = false;
     }
-    modeChanged = false;
 }
 
 void  checkOptions(){
@@ -430,7 +433,6 @@ void  checkOptions(){
       Serial.println(currentModeOption[2], DEC);
       Serial.println(F("==================="));
     } 
-  
   optionChanged=false;
   }
 }
@@ -446,6 +448,7 @@ char* getString(const char* str) {
 
 void prank(){
   if(currentMode==3 && isItDark==true){
+    prankInOperation = true;
     // here it might be different for different pranks 
     // but for now - check the light and ...
     Serial.println(F(""));
@@ -458,6 +461,5 @@ void prank(){
     
     tmrpcm.stopPlayback();
     tmrpcm.play(getString(selectedPrank));
-    prankInOperation = true;
   }
 }
