@@ -14,63 +14,53 @@ then playback does not work
 The minimum at start has to be 340 
 */
 
-#include <avr/pgmspace.h>
 #include <MemoryFree.h>
 #include <pgmStrToRAM.h>
 #include <SD.h>             // need to include the SD library
-#define SD_ChipSelectPin 4  // using digital pin 4 on arduino nano 328
 #include <TMRpcm.h>         // also need to include this library...
 #include "Timer.h"
 
-#define DEBUG  // comment this line out to disable debug statements
+#define DEBUG  // comment this line out to disable some of the debug statements
 
 #ifdef DEBUG
   #define DEBUG_PRINTLN(x)  Serial.println(F(x))
 #else
-  #define DEBUG_PRINT(x)
+  #define DEBUG_PRINTLN(x)
 #endif
 
-TMRpcm tmrpcm;   // create an object for use in this sketch
+// define used pins (use #define where possible as it saves RAM) 
+#define SD_CHIP_SELECT_PIN 4  // using digital pin 4 on arduino nano 328
+#define BUTTO_A_PIN 7
+#define BUTTO_B_PIN 8
+#define SPEAKER_PIN 9
+#define DARKNESS_LEVEL 500 //900;
+#define HOW_OTEN_TO_PRINT 1000  //1s
+#define HOW_OTEN_TO_PRANK 30 * 1000  //30 sec
+#define CHECKLIGHTPERIOD 250    //250ms
+#define BUTTON_DEBOUNCE_DELAY 50  // 50ms buttons the debounce time; increase if the output flickers
+
+
+
+TMRpcm tmrpcm;
 Sd2Card card;
+Timer t1, t2, t3;         //timers used by the program
 
 String inputString = "";         // a string to hold incoming data
 boolean stringComplete = false;  // whether the string is complete
-int lightLevel;
+int currentLightLevel;
 
-// constants
-const int darkLevel = 500; //900;
 boolean isItDark = true;  // whether the string is complete
+boolean prankInOperation = false;
 
-const unsigned long CHECKLIGHTPERIOD = 250;    //250ms
-Timer t1;                               //instantiate the timer object
-int t1ID;
-
-const unsigned long HOW_OTEN_TO_PRINT = 1000;  //1s
-Timer t2;            //instantiate the timer object
-int t2ID;
-
-const unsigned long HOW_OTEN_TO_PRANK = 1 * 20 * 1000;  //5min
-Timer t3;            //instantiate the timer object
-int t3ID;
 
 
 /*
  * Variables used by button A and B
  *
  */
-
-//constants:
-const int buttonPinA = 7;
-const int buttonPinB = 8;
-const long BUTTON_DEBOUNCE_DELAY = 50;  // the debounce time; increase if the output flickers
-
-
-// variables:
-int ledStateA = HIGH;         // the current state of the output pin
 int buttonStateA;             // the current reading from the input pin
 int lastButtonStateA = LOW;   // the previous reading from the input pin
 
-int ledStateB = HIGH;         // the current state of the output pin
 int buttonStateB;             // the current reading from the input pin
 int lastButtonStateB = LOW;   // the previous reading from the input pin
 
@@ -91,7 +81,7 @@ const int maxMode = 3;
 boolean modeChanged = false;
 
 int   currentModeOption[4] = {-1,-1, 2,-1};
-const int maxModeOption[4] = { 0, 4, 4, 1};
+const int maxModeOption[4] = { 0, 4, 4, 0};
 boolean optionChanged = false;
 
 /*
@@ -99,14 +89,18 @@ here current option has to be stored separatelly per mode
 for mode0 - welcome message there is no options - "Hi I'm jokeDuino "
 for mode1 - choose prank type there will be N options looping "choose different pranks by pressing B button"
             0 - moskito
+            1 - door
+            2 - police
+            3 - dog
+            4 - cat
 
-for mode2 - set up volume options 0 - 5 options looping "change volume by pressing B button" (we start from level 3 - there is 7 levels of volumes but the last ones 6 and 7 do not work for us )
+for mode2 - set up volume options 0 - 4 options looping "change volume by pressing B button" (we start from level 3 - there is 7 levels of volumes but the last ones 5, 6 and 7 do not work for us )
 for mode3 - ready to go - no options "I'm ready to go do not press anything more - selected prank is: "
 */
 
-prog_char intro[] PROGMEM = { "modes/intro.wav" };
+prog_char intro[]  PROGMEM = { "modes/intro.wav" };
 
-prog_char mo0[]  PROGMEM = { "modes/mo0.wav" };
+prog_char mo0[]    PROGMEM = { "modes/mo0.wav" };
 
 prog_char mo1[]    PROGMEM = { "modes/mo1.wav" };
 // mode 1 option sounds
@@ -125,33 +119,33 @@ prog_char smo1op4[] PROGMEM = { "insects/mosq1.wav" };
 
 prog_char* selectedPrank = smo1op0;
           
-prog_char mo2[] PROGMEM = { "modes/mo2.wav" };
-prog_char mo2op[] PROGMEM = { "modes/mo2op.wav" }; // TODO: record /modes/mo2o.wav "sound level testing, sound level testing"
+prog_char mo2[]   PROGMEM = { "modes/mo2.wav" };
+prog_char mo2op[] PROGMEM = { "modes/mo2op.wav" }; // "sound level testing, sound level testing"
 
-prog_char mo3[] PROGMEM = { "modes/mo3.wav" };
+prog_char mo3[]   PROGMEM = { "modes/mo3.wav" };
 
 
 // ==========================================
 // commands from serial
 // ==========================================
 
-prog_char modeupx[] PROGMEM = { "modex" };
-prog_char optionupx[] PROGMEM = { "optionx" };
+prog_char modeupx[]   PROGMEM = { "mox" };  // for mode button up
+prog_char optionupx[] PROGMEM = { "opx" };  // for option button up 
 
 // ==========================================
 
 void setup(){
   // reserve memory for commands over serial port
-  inputString.reserve(10);
+  inputString.reserve(5);  // here we need only 3 bytes mox opx (we gice extra 2 characters)
   
-  pinMode(buttonPinA, INPUT_PULLUP);    // this enable build in pull up resistor for pin 12
-  pinMode(buttonPinB, INPUT_PULLUP);    
+  pinMode(BUTTO_A_PIN, INPUT_PULLUP);    // this enable build in pull up resistor for buttonA pin
+  pinMode(BUTTO_B_PIN, INPUT_PULLUP);    // this enable build in pull up resistor for buttonB pin
 
   
   pinMode(10, OUTPUT);
   digitalWrite(10, HIGH); // davekw7x: If it's low, the Wiznet chip corrupts the SPI bus
   
-  tmrpcm.speakerPin = 9; // set the speaker pin to 9
+  tmrpcm.speakerPin = SPEAKER_PIN;
 
   // Open serial communications and wait for port to open:
   Serial.begin(9600);
@@ -160,41 +154,40 @@ void setup(){
   } 
   
   
-  if (!card.init(SPI_HALF_SPEED, SD_ChipSelectPin)) {
+  if (!card.init(SPI_HALF_SPEED, SD_CHIP_SELECT_PIN)) {
     Serial.println(F("initialization failed. Things to check:"));
     Serial.println(F("* is a card is inserted?"));
     Serial.println(F("* Is your wiring correct?"));
-    //Serial.println("* did you change the chipSelect pin to match your shield or module?");
     return;
   } else {
    Serial.println(F("Wiring is correct and a card is present.")); 
   }
   
-  if (!SD.begin(SD_ChipSelectPin)) {  // see if the card is present and can be initialized:
+  if (!SD.begin(SD_CHIP_SELECT_PIN)) {  // see if the card is present and can be initialized:
     Serial.println(F("SD fail :-("));  
     return;   // don't do anything more if not
   }
   
-  t1ID = t1.every(CHECKLIGHTPERIOD, checkLightSensor);
+  t1.every(CHECKLIGHTPERIOD, checkLightSensor);
   
   #ifdef DEBUG
-    t2ID = t2.every(HOW_OTEN_TO_PRINT, printInfo);
+    t2.every(HOW_OTEN_TO_PRINT, printInfo);
   #else
     // print it just once here
     printInfo(); 
   #endif
   
-  t3ID = t3.every(HOW_OTEN_TO_PRANK, prank);
+  t3.every(HOW_OTEN_TO_PRANK, prank);
+  
   tmrpcm.play(getString(intro)); //play the intro message
 }
 
-void loop(){  
 
+
+void loop(){  
   // TODO: now add light sensor 
   // and play sounds only when it is dark 
   // do brakes between playing a sound
-  
-  
   readButtonA();
   readButtonB();
   t1.update();
@@ -209,52 +202,28 @@ void loop(){
     checkOptions();
   }
   
-  
-  
   if (stringComplete) {
     // received command from serial  
     changeCurrentModeBasedOnSerial();
     changeCurrentModeOptionBasedOnSerial();
-    
-    /*
-    if(inputString == "mosq1x"){ //send the letter p over the serial monitor to start playback
-      
-      tmrpcm.stopPlayback();
-      tmrpcm.play("insects/mosq1.wav");
-    
-    } else if(inputString == "door1x"){ //send the letter p over the serial monitor to start playback
-      // here test the 
-      tmrpcm.stopPlayback();
-      tmrpcm.play("doors/door1.wav");
-    
-    } else if(inputString == "qx"){ //send the letter p over the serial monitor to start playback
-      // here test the 
-      tmrpcm.stopPlayback();
-
-    } else if(inputString == "dx"){ 
-      tmrpcm.volume(0);
-    } else if(inputString == "ux"){ 
-      tmrpcm.volume(1);
-    }
-    */
-    
     inputString = "";
     stringComplete = false;
   }
-  delay(500);
 }
 
 
 void checkLightSensor(){
-  lightLevel = analogRead(A0);
-  if(lightLevel > darkLevel ){
+  currentLightLevel = analogRead(A0);
+  if(currentLightLevel > DARKNESS_LEVEL ){
     isItDark = true;
     // here start some timer 
   }else{
     isItDark = false;
     //TODO: here instead of stopping directly change flag
     // this way we will have more control e.g. do not stop the intro message
-    tmrpcm.stopPlayback();
+    if(currentMode==3 && prankInOperation==true){
+       tmrpcm.stopPlayback();
+    }
   }
 }
 
@@ -288,7 +257,7 @@ void printInfo(){
   Serial.print(F("Free RAM: "));
   Serial.print(freeMemory(), DEC); 
   Serial.print(F("\tLight level: "));
-  Serial.print(lightLevel, DEC);
+  Serial.print(currentLightLevel, DEC);
 
    Serial.print(F("\tselected mode (buttonA): "));
    Serial.print(currentMode, DEC);
@@ -325,7 +294,7 @@ void changeCurrentModeOptionBasedOnSerial(){
  
  void readButtonA(){
     // read the state of the switch into a local variable:
-  int reading = digitalRead(buttonPinA);
+  int reading = digitalRead(BUTTO_A_PIN);
   
   // check to see if you just pressed the button 
   // (i.e. the input went from LOW to HIGH),  and you've waited 
@@ -362,7 +331,7 @@ void changeCurrentModeOptionBasedOnSerial(){
  
  void readButtonB(){
       // read the state of the switch into a local variable:
-  int reading = digitalRead(buttonPinB);
+  int reading = digitalRead(BUTTO_B_PIN);
   
   // check to see if you just pressed the button 
   // (i.e. the input went from LOW to HIGH),  and you've waited 
@@ -389,6 +358,7 @@ void changeCurrentModeOptionBasedOnSerial(){
          if(currentModeOption[currentMode] > maxModeOption[currentMode] ){
             currentModeOption[currentMode] = 0;
          } 
+         optionChanged=true;
       }
     }
   }
@@ -443,7 +413,7 @@ void  checkOptions(){
           tmrpcm.play(getString(mo1op4));
           break;
         }
-       //TODO: remove it
+       
        Serial.println(F(""));
        Serial.println(F("==================="));
        Serial.println(getString(selectedPrank));
@@ -454,6 +424,11 @@ void  checkOptions(){
       tmrpcm.stopPlayback();
       tmrpcm.setVolume(currentModeOption[2]);
       tmrpcm.play(getString(mo2op));
+      Serial.println(F(""));
+      Serial.println(F("==================="));
+      Serial.print(F("sound level: "));
+      Serial.println(currentModeOption[2], DEC);
+      Serial.println(F("==================="));
     } 
   
   optionChanged=false;
@@ -461,8 +436,8 @@ void  checkOptions(){
 }
 
 
-#define MAX_STRING 30  //TODO: count longest string 
-char stringBuffer[MAX_STRING];
+#define STRING_BUFFER_SIZE 30  //TODO: count longest string 
+char stringBuffer[STRING_BUFFER_SIZE];
 
 char* getString(const char* str) {
   strcpy_P(stringBuffer, (char*)str);
@@ -470,12 +445,19 @@ char* getString(const char* str) {
 }
 
 void prank(){
-  // here it might be different for different pranks 
-  // but for now - check the light and ...
-  Serial.println(F("==========================="));
-  Serial.println(F("==== GOING TO PRANK NOW ==="));
-  Serial.println(F("==========================="));
-  
-  tmrpcm.stopPlayback();
-  tmrpcm.play(getString(selectedPrank));
+  if(currentMode==3 && isItDark==true){
+    // here it might be different for different pranks 
+    // but for now - check the light and ...
+    Serial.println(F(""));
+    Serial.println(F("==========================="));
+    Serial.println(F("GOING TO PRANK NOW"));
+    Serial.print(F("next prank in "));
+    Serial.print(HOW_OTEN_TO_PRANK);
+    Serial.println(F(" ms"));
+    Serial.println(F("==========================="));
+    
+    tmrpcm.stopPlayback();
+    tmrpcm.play(getString(selectedPrank));
+    prankInOperation = true;
+  }
 }
